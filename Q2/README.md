@@ -1,42 +1,9 @@
-#include <limits.h>
-#include <math.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <errno.h>
-#include <time.h>
-#include <wait.h>
-#include <semaphore.h>
+### README AND LOGIC FOR QUESTION
 
-#define RED "\033[1;31m"
-#define GREEN "\033[1;32m"
-#define YELLOW "\033[1;33m"
-#define CYAN "\033[1;36m"
-#define BLUE "\033[1,34m"
-#define DEFAULT "\033[0m"
-#define CLEAR "\033[2J\033[1;1H"
+There are 3 structures for the three threads
+structure for the companies
 
-
-struct vac
-{
-    int total ;
-    double x ;
-    int id;
-};
-int left;   // number of students left to be vaccinated
-pthread_mutex_t m_left;  // lock for above var
-int wait1=0;   // number of students currently waiting
-pthread_mutex_t m_wait;   // lock for abouve
-pthread_cond_t cv_wait;
-
-
+``` c
 typedef struct Company
 {
 int id; 
@@ -52,7 +19,10 @@ int total;  // total vaccine produced in one session
 pthread_mutex_t m_state;
 pthread_cond_t cv_state;
 }Company;
+```
+structure for the  student
 
+``` c
 typedef struct Student
 {
     int id;
@@ -70,7 +40,11 @@ typedef struct Student
     pthread_cond_t cv_state;
     int size;   // size of number of zones
 }Student;
-typedef struct Zones
+````
+structure for zones
+
+```` c
+ usetypedef struct Zones
 {
     int id ;
     int cnt;    // current number of vaccines
@@ -86,57 +60,16 @@ typedef struct Zones
     int last;  //last company which delivered
     double x;
 }Zones;
-Zones** zone; // global use 
+Zones** zone; // global 
+`````
 
+each of them has a mutex lock and conditional variable to wait .
+we also have 2 global variables wait1 and left to count the number of students waiting and number students who havent been sent home or college
+both with their mutex and lock
 
+the thread function for pharmacy
 
-
-//initialise company variables
-void init_company(int id,double x,Company* z)
-{
-    z->id = id;
-    z->x = x;
-    z->state = 1;  //tells company to start manufacturing once initialised
-    z->total = 0;
-    pthread_mutex_init(&(z->m_state),NULL);
-    pthread_cond_init(&(z->cv_state),NULL);
-}
-
-//initialise student variables
-void init_student(int id,Student* z,int m)
-{
-    z->id = id;
-    z->state = 0;  //waiting 
-    z->cnt = 0;   // no shots yet
-    z->zone = -1;  
-    z->x = 0.0;
-    z->size = m;
-    pthread_mutex_init(&(z->m_state),NULL);
-    pthread_cond_init(&(z->cv_state),NULL);
-
-
-}
-
-//initialise zone variables
-void init_zone(int id,Zones* z,Company** comp,int n,Student** stud,int o)
-{
-z->id = id;
-z->comp = comp;
-z->stud = stud;
-z->n = n;
-z->o = o;
-z->slot = 0;
-z->sleep = 0;
-pthread_mutex_init(&(z->m_cnt),NULL);
-pthread_cond_init(&(z->cv_cnt),NULL);
-z->last = -1;
-z->cnt = 0;
-z->x = 0.0;
-
-}
-
-
-
+````c
 //this is the function for company threads
 void* start_manufacturing(void* inp)
 {
@@ -196,8 +129,63 @@ void* start_manufacturing(void* inp)
    
 }
 
+````
+each thread begins by starting manufacturing p*r vaccines and lets the zones know that vaccines is ready and waits  while the a zone signals the company and signals the company,it only resumes manufacturing when it is signaled that all previously manufactured vaccines have been used up.this is done using pthread_cond_wait function
+
+There are 3 simple initialisation function each for one particular type of thread.global variables are initialised in main
+
+`````c
 
 
+
+//initialise company variables
+void init_company(int id,double x,Company* z)
+{
+    z->id = id;
+    z->x = x;
+    z->state = 1;  //tells company to start manufacturing once initialised
+    z->total = 0;
+    pthread_mutex_init(&(z->m_state),NULL);
+    pthread_cond_init(&(z->cv_state),NULL);
+}
+
+//initialise student variables
+void init_student(int id,Student* z,int m)
+{
+    z->id = id;
+    z->state = 0;  //waiting 
+    z->cnt = 0;   // no shots yet
+    z->zone = -1;  
+    z->x = 0.0;
+    z->size = m;
+    pthread_mutex_init(&(z->m_state),NULL);
+    pthread_cond_init(&(z->cv_state),NULL);
+
+
+}
+
+//initialise zone variables
+void init_zone(int id,Zones* z,Company** comp,int n,Student** stud,int o)
+{
+z->id = id;
+z->comp = comp;
+z->stud = stud;
+z->n = n;
+z->o = o;
+z->slot = 0;
+z->sleep = 0;
+pthread_mutex_init(&(z->m_cnt),NULL);
+pthread_cond_init(&(z->cv_cnt),NULL);
+z->last = -1;
+z->cnt = 0;
+z->x = 0.0;
+
+}
+ ```
+
+now the function for zone which is the most complicated
+
+````c
 
 // function for thread zones
 
@@ -413,7 +401,27 @@ printf(RED "current zone %d has %d vaccines with success probability %lf\n" DEFA
     return NULL;
 }
 
-// for students
+
+```` 
+
+first it tries to detect a company with ready vaccines.once it detects such a company it signals the company to deliver it
+once all vaccines are delivered  it goes to the next part
+
+till the zone has non -zero vaccines left it does the following
+
+generates slot;
+while there are slots left and students are waiting 
+the zone actively looks to find students who are yet to be vaccinated
+one such students are found,the student is signaled to let it know it has been assigned slot
+once no more slots can be filled vaccination phase begins
+ zone vaccinates all such students and signals the sleeping student threads to let it know it vaccination done
+once this phase of vaccination is finished,it restarts with slot generation
+once all vaccines are finished ,it signals the company to let it know it has to restart manufacturing and the zone actively looks for the next zone.
+
+ function for students
+
+ ```` c
+ // for students
 void* getting_vaccinated(void* inp)
 {
     sleep(4);
@@ -505,78 +513,15 @@ void* getting_vaccinated(void* inp)
 }
 
 
+```c
 
+the code initially checks whether the student is already vaccinated or has already failed 3 times
+once it is satisfied that it is not the case,the student thread conditionally waits till he is signaled that he has been assigned the
+a slot.He only wakes up once vaccination is completed.(signaled by zone)
 
+after that the thread simulates a antibodies test
+if positive it returns
+else
+it repeats the whole process described in the function
 
-
-
-
-
-int main()
-{
-    int n,m,o;
-    
-    scanf("%d",&n);
-    scanf("%d",&m);
-    scanf("%d",&o);
-    wait1 = o;
-    left = o;
-    double x[n];
-    for(int i=0;i<n;i++)
-    scanf("%lf",&x[i]);
-    Student** students = (Student**)malloc(sizeof(Student*)*o);
-     zone = (Zones**)malloc(sizeof(Zones*)*m);
-    Company** companies = (Company**)malloc(sizeof(Company*)*n);
-  //  vac** state = (vac**)malloc(sizeof(vac*)*n);
-printf(CYAN "Simulation Begins\n" DEFAULT);
-pthread_cond_init(&cv_wait,NULL);
-pthread_mutex_init(&m_wait,NULL);
-pthread_mutex_init(&m_left,NULL);
-if(n>0 && m>0 && o>0)
-{
-    for(int i=0;i<n;i++)
-    {
-        companies[i]=(Company*)malloc(sizeof(Company));
-       // state[i]=(vac*)malloc(sizeof(vac));
-        init_company(i,x[i],companies[i]);
-        pthread_create(&(companies[i]->tid),NULL,start_manufacturing,(void*)companies[i]);
-    
-    }
-    for(int i=0;i<o;i++)
-    {
-        students[i] = (Student*)malloc(sizeof(Student));
-        init_student(i,students[i],m);
-        pthread_create(&(students[i]->tid),NULL,getting_vaccinated,(void*)students[i]);
-    
-    }
-    for(int i=0;i<m;i++)
-    {
-        zone[i] = (Zones*)malloc(sizeof(Zones));
-        init_zone(i,zone[i],companies,n,students,o);
-        pthread_create(&(zone[i]->tid),NULL,start_vaccination,(void*)zone[i]);
-
-    }
-   for(int i=0;i<o;i++)
-   {
-       pthread_join(students[i]->tid,NULL);
-       /*printf("%d th return \n",i);
-       pthread_mutex_lock(&m_wait);
-       pthread_mutex_lock(&m_left);
-       
-       printf("wait %d, left %d\n",wait1,left);
-       pthread_mutex_unlock(&m_wait);
-       pthread_mutex_unlock(&m_left);*/
-   }
-}
-printf(GREEN "Simulation Done\n" DEFAULT);
-
-for(int i=0;i<n;i++)
-pthread_mutex_destroy(&(companies[i]->m_state));
-for(int i=0;i<m;i++)
-pthread_mutex_destroy(&(students[i]->m_state));
-pthread_mutex_destroy(&m_wait);
-pthread_mutex_destroy(&m_left);
-return 0;
-
-
-}
+the simulation ends once all the student threads have returned
