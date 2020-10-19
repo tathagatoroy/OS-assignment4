@@ -425,7 +425,7 @@ void* getting_vaccinated(void* inp)
        // if state !=4 -> successfully vaccinated if arg->cnt >=3 ,go home,cant come to college
           if(arg->state !=4 && arg->cnt >= 3)
           {
-              printf(BLUE "Student %d has his 3 attempts completed but unsuccesful,he/she is going home\n" DEFAULT,arg->id);
+              printf(RED "Student %d has his 3 attempts completed but unsuccesful,he/she is going home\n" DEFAULT,arg->id);
               pthread_mutex_lock(&(m_left));
               left = left -1;  // 1 less left
               pthread_mutex_unlock(&(m_left));
@@ -478,16 +478,30 @@ void* getting_vaccinated(void* inp)
      }
      if(arg->state == 3)
      {
-         printf(RED "student %d has tested positive for antibodies\n" DEFAULT,arg->id);
+         double pos = (double)rand()/(double)RAND_MAX;
+         if(pos <= arg->x)
+        {   printf(RED "student %d has tested positive for antibodies\n" DEFAULT,arg->id);
+            printf(CYAN "student %d is going to college ,he has vaccinated succesful,he is safe\n" DEFAULT,arg->id);
          pthread_mutex_lock(&m_left);
          left--;
          pthread_mutex_unlock(&m_left);
          pthread_mutex_unlock(&(arg->m_state));
          return NULL;
+        }
+        else
+        {
+            printf(YELLOW "student %d has tested negative for antibodies\n" DEFAULT,arg->id);
+            arg->state = 0;
+            pthread_mutex_unlock(&arg->m_state);
+            pthread_mutex_lock(&m_wait);
+            wait1+=1;
+            pthread_mutex_unlock(&m_wait);
+        }
 
      }
     }
     }
+    return NULL;
 }
 
 
