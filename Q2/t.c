@@ -244,7 +244,7 @@ void* start_vaccination(void* inp)
        // printf("inside generation\n");
         pthread_mutex_lock(&(arg->m_cnt));
 
-
+printf(RED "current zone %d has %d vaccines\n" DEFAULT,arg->id,arg->cnt);
         // if all vaccines have been used
         if(arg->cnt <= 0)
         {
@@ -299,58 +299,48 @@ void* start_vaccination(void* inp)
           //SLOTS ASSIGNMENT
   //conditionally wait till slots are assigned
   //pthread_mutex_unlock(&arg->m_cnt);
+  int j = 0;
+  int f = 0;
+  int list[arg->o];
+  for(int i1=0;i1<arg->o;i1++)
+  list[i1]=0;
           while(true)
           {
-              printf("waiting for locked4\n");
+              pthread_mutex_lock(&m_wait);
+              if(wait1 == 0 && f!=0)
+              {
+                  pthread_mutex_unlock(&m_wait);
+                  break;
 
-             pthread_mutex_lock(&m_wait);
-             printf("locked4\n");
-    //         pthread_mutex_lock(&arg->m_cnt);
-             arg->sleep = 0;
-             printf("Zone %d is now awake\n",arg->id);
-             
-             // no one is waiting can start vaccination
-             printf("wait %d\n",wait1);
-           /* // if(wait1 == 0)
+              }
+              pthread_mutex_unlock(&m_wait);
+              if(arg->slot == 0)
+              {
+                  break;
+              }
+             pthread_mutex_lock(&(arg->stud[j]->m_state));
+             if(arg->stud[j]->state == 0)
              {
-                 
+                 list[j] = 1;
+                 f++;
+                 arg->stud[j]->state = 1;
+                 arg->stud[j]->zone = arg->id;
+                 pthread_mutex_lock(&(arg->comp[arg->last]->m_state));
+                 arg->stud[j]->zone = arg->comp[arg->last]->x;
+                 pthread_mutex_unlock(&(arg->comp[arg->last]->m_state));
+                 pthread_mutex_unlock(&(arg->stud[j]->m_state));
+                 pthread_mutex_lock(&m_wait);
+                 wait1--;
                  pthread_mutex_unlock(&m_wait);
-                 printf(YELLOW "No more waiting students ,let Vaccination by zone %d begin\n" DEFAULT,arg->id);
-                 arg->slot = 0;  // no slots left even though ther
-                 pthread_mutex_lock(&m_wait);*/
-               if(arg->slot == 0)
-               {
-                   printf("No more slot left for Zone %d,let Vaccination begin\n",arg->id);
-                   pthread_mutex_unlock(&m_wait);
-                   printf("unlocked6\n");
-                   break;
-               }
-               else if(wait1 == 0 && arg->slot != temp)
-               {
-                   printf("NO ONE IS WAITING,let Zone %d start Vaccination\n",arg->id);
-                   pthread_mutex_unlock(&m_wait);
-                   printf("unlocked11\n");
-                   break;
-               }
-               else
-               {
-                   printf("ZONE %d is going to sleep\n",arg->id);
-                   arg->sleep = 1;
-                   pthread_mutex_unlock(&(m_wait));
-                
-               //    printf("sleeping unlocked12\n");
-               printf("unlocking hoho\n");
-               pthread_mutex_unlock(&(arg->m_cnt));
-               printf("unlocked hoho\n");
-                   pthread_cond_wait(&(arg->cv_cnt),&(arg->m_cnt));
-                   printf("waking %d\n",arg->id);
-                   pthread_mutex_lock(&(arg->m_cnt));
-                   printf("locked\n");
-                 //  printf("again locked13\n");
-                  // pthread_mutex_unlock(&(m_wait));
-                  // printf("again unlocked14\n");
+                 arg->slot --;
+                 printf(CYAN "Student %d has been assigned vaccination zone %d\n" DEFAULT,j,arg->id);
 
-               }
+            
+             }
+             pthread_mutex_unlock(&(arg->stud[j]->m_state));
+             j=(j+1)%arg->o;
+
+               
                
              // no slot left ,can start vaccination
              
@@ -363,9 +353,20 @@ void* start_vaccination(void* inp)
 
           //VACCINATION ONGOING
           sleep(1);
-          for(int i=0;i<arg->o;i++)
+          for(int g=0;g<arg->o;g++)
           {
-            pthread_mutex_lock(&(arg->stud[i]->m_state));
+              if(list[g]==1)
+              {
+                  pthread_mutex_lock(&(arg->stud[g]->m_state));
+                   printf(YELLOW "Student %d on vaccination zone %d has been vaccinated which has success probability %lf\n" DEFAULT,g,arg->id,arg->stud[i]->x);
+                   arg->stud[g]->state = 3;
+                   arg->stud[g]->cnt += 1;
+                   pthread_cond_signal(&(arg->stud[g]->cv_state));
+                   pthread_mutex_unlock(&(arg->stud[g]->m_state));
+                   arg->cnt -= 1;
+                   list[g] = 0;
+              }
+            /*pthread_mutex_lock(&(arg->stud[i]->m_state));
             //if student i is assigned this slot and they get vaccinated
             if(arg->stud[i]->zone == arg->id && arg->stud[i]->state == 1)
             {
@@ -376,15 +377,16 @@ void* start_vaccination(void* inp)
               arg->cnt -= 1;   //no of vaccines used decrease
               pthread_mutex_unlock(&(arg->comp[arg->last]->m_state));
               printf(YELLOW "Student %d on vaccination zone %d has been vaccinated which has success probability %lf\n" DEFAULT,i,arg->id,arg->stud[i]->x);
-              pthread_cond_signal(&(arg->stud[i]->cv_state));//let the student know you have vaccinated him
+              pthread_cond_signal(&(arg->stud[i]->cv_state));//let the student know you have vaccinated him*/
 
             }
-
-            pthread_mutex_unlock(&(arg->stud[i]->m_state));
+          printf(YELLOW "SLOT FINISHED FOR %d\n",arg->id);
+          pthread_mutex_unlock(&(arg->m_cnt));
+            //pthread_mutex_unlock(&(arg->stud[i]->m_state));
           }
           pthread_mutex_unlock(&(arg->m_cnt));
           
-      }
+      
  
     pthread_mutex_lock(&(m_left));
     // if no one is left,no point in zones asking for vaccines
@@ -452,90 +454,31 @@ void* getting_vaccinated(void* inp)
      //looking for slot
      while(true)
      {
-         printf("student %d acquiring lock of zone %d\n",arg->id,i);
-      pthread_mutex_lock(&(zone[i]->m_cnt));
-      printf("acquired of lock %d by student %d\n",i,arg->id);
-     // printf("student %d is checking zone %d\n",arg->id,i);
-      // checking whether zone[i] has any open slot
-      if(zone[i]->slot > 0)
-      {
-          arg->zone = i;  //assign zone to student
-          zone[i]->slot -= 1; // reduce number of slot left for zone
-          printf(YELLOW "student %d is assigned to the vaccination zone %d\n" 
-          DEFAULT,arg->id,i);
-          printf("waiting for lock2\n");
-          pthread_mutex_lock(&(m_wait));
-          printf("locked2\n");
-          wait1 = wait1 -1;// less people waiting
-          pthread_mutex_unlock(&(m_wait));
-        
-          arg->state = 1;  //state waiting to be vaccinated
-          printf("here %d\n",arg->size);
-          printf("giving up lock of %d by student %d\n",i,arg->id);
-          pthread_mutex_unlock(&(zone[i]->m_cnt));
-          for(int i1=0;i1<(arg->size);i1++)
-          {
-              printf("i1 %d\n",i1);
-              if(i1!=-1)
-              {
-                  printf("inside\n");
-                  printf("waiting for zoning %d lock\n",i1);
-              pthread_mutex_lock(&(zone[i1]->m_cnt));
-              printf("locked zoning\n");
-              printf(" %d\n ",zone[i1]->sleep);
-              if(zone[i1]->sleep == 1)
-              {
-                  printf("%d th zone is sleeping\n",i1);
-          pthread_cond_signal(&(zone[i1]->cv_cnt));
-              }
-          pthread_mutex_unlock(&(zone[i1]->m_cnt));
-              }
-          }  //let the zone know ,slot have been assigned
-
-          //pthread_mutex_unlock(&(m_wait));
-          printf("unlocked2\n");
-          pthread_mutex_unlock(&(zone[i]->m_cnt));
-          //slot assigned,no more searching required
-          break;
-      }
-      //search for slot in next zone
-      pthread_mutex_unlock(&(zone[i]->m_cnt));
-      i=(i+1)%arg->size;
+         if(arg->state == 3)
+         {
+             
+             printf(RED "student %d has been vaccinated in vaccination zone %d with success probability %lf\n" DEFAULT,arg->id,arg->zone,arg->x);
+             break;
+         }
+         else
+         {
+             pthread_cond_wait(&(arg->cv_state),&(arg->m_state));
+         }
+         
      }
-     //WAITING TO BE VACCINATED;
-     //SLOT ASSIGNED ,ZONE ASSIGNED
-     //CONDITIONALLY WAITING TO BE VACCINATED
-     printf("student %d has state %d and is walking and waiting\n",arg->id,arg->state);
-     while(true)
+     if(arg->state == 3)
      {
-        if(arg->state == 3)// VACCINATION DONE
-        break;
-        else if(arg->state == 1)
-        {
-            printf("student %d is going to sleep\n",arg->id);
-        pthread_cond_wait(&(arg->cv_state),&(arg->m_state));
-        printf("student %d just woke up\n",arg->id);
-        }
+         printf(RED "student %d has tested positive for antibodies\n" DEFAULT,arg->id);
+         pthread_mutex_lock(&m_left);
+         left--;
+         pthread_mutex_unlock(&m_left);
+         pthread_mutex_unlock(&(arg->m_state));
+         return NULL;
+
      }
-     //VACCINATION DONE
-     sleep(1);
-     //ANTIBODY TESTING SUCCESFUL;
-     //ASSUME ALL TEST ARE SUCCESFUL NOW,PROBABILISTIC MODEL YET TO BE IMPLEMENTED
-      arg->state = 4;
-     printf(RED "student %d has tested positive for Antibodies\n" DEFAULT,arg->id);
-     pthread_mutex_unlock(&(arg->m_state));
-     pthread_mutex_lock(&(m_left));
-     left=left-1;
-     pthread_mutex_unlock(&(m_left));
-     return NULL;
     }
-    
     }
-    return NULL;
 }
-
-    
-
 
 
 
