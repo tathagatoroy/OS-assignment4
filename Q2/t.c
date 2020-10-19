@@ -568,7 +568,7 @@ if(n>0 && m>0 && o>0)
        pthread_mutex_unlock(&m_left);*/
    }
 }
-printf("Simulation Done\n");
+printf(GREEN "Simulation Done\n" DEFAULT);
 
 for(int i=0;i<n;i++)
 pthread_mutex_destroy(&(companies[i]->m_state));
